@@ -38,8 +38,8 @@ COST_TABLE = {
 }
 
 DEFAULT_MODELS = [
-    "ollama:deepseek-r1:70b",
-    "ollama:qwen3:32b",
+    "vllm:deepseek-r1-70b",
+    "vllm:qwen3-32b",
     "anthropic",
     "google",
     "openai",

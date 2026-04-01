@@ -7,7 +7,10 @@ PROCESSED_DIR = data/processed
 FIGURES_DIR = paper/neurips_2026/figures
 
 # Default models for collection
-MODELS = ollama:deepseek-r1:70b ollama:qwen3:32b anthropic google openai
+# vLLM models run on NVWulf, API models run locally
+MODELS_VLLM = vllm:deepseek-r1-70b vllm:qwen3-32b
+MODELS_API = anthropic google openai
+MODELS = $(MODELS_VLLM) $(MODELS_API)
 
 # ============================================================
 # Full pipeline
@@ -122,14 +125,63 @@ visualize:
 		--log-level INFO
 
 # ============================================================
+# Split collection: API models locally, vLLM models on cluster
+# ============================================================
+
+# Run API models only (locally)
+collect-api:
+	python -m src.collect.run_collection \
+		--tasks-dir $(TASKS_DIR) \
+		--output-dir $(RAW_DIR) \
+		--models $(MODELS_API) \
+		--repeated-samples 5 \
+		--repeated-bucket factual_qa \
+		--log-level INFO
+
+# Submit vLLM collection jobs to NVWulf (run from cluster)
+collect-cluster:
+	sbatch scripts/slurm_vllm_collect.sh --export=MODEL=deepseek-r1-70b
+	sbatch scripts/slurm_vllm_collect.sh --export=MODEL=qwen3-32b
+
+# Pilot API models only (locally)
+pilot-api:
+	python scripts/pilot.py \
+		--tasks-dir $(TASKS_DIR) \
+		--output-dir $(RAW_DIR) \
+		--models $(MODELS_API) \
+		--log-level INFO
+
+# ============================================================
+# Data transfer (sync between local and cluster)
+# ============================================================
+
+NVWULF_HOST ?= nvwulf
+NVWULF_PROJECT = /lustre/nvwulf/scratch/nijjohnson/cot-analysis
+
+# Push task suite + code to cluster
+push-cluster:
+	rsync -avz --exclude='.venv' --exclude='data/raw' --exclude='data/raw_payloads' \
+		--exclude='data/processed' --exclude='__pycache__' --exclude='.env' \
+		./ $(NVWULF_HOST):$(NVWULF_PROJECT)/
+
+# Pull collected data from cluster
+pull-cluster:
+	rsync -avz $(NVWULF_HOST):$(NVWULF_PROJECT)/data/raw/ data/raw/
+	rsync -avz $(NVWULF_HOST):$(NVWULF_PROJECT)/data/raw_payloads/ data/raw_payloads/
+
+# ============================================================
 # Development / testing
 # ============================================================
 
 dev: pilot annotate analyze visualize
 
-# Install dependencies
+# Install dependencies (local)
 install:
 	pip install -r requirements.txt
+
+# Setup cluster environment
+install-cluster:
+	bash scripts/setup_nvwulf.sh
 
 # Clean generated data (preserves tasks)
 clean:
@@ -140,18 +192,39 @@ clean:
 
 help:
 	@echo "Available targets:"
-	@echo "  all            - Full pipeline: collect → annotate → analyze → visualize"
-	@echo "  collect        - Run data collection across all models"
-	@echo "  collect-model  - Collect for one model (MODEL=ollama:deepseek-r1:70b)"
-	@echo "  pilot          - Run 50-prompt pilot across all models"
-	@echo "  pilot-model    - Pilot for one model (MODEL=ollama:deepseek-r1:70b)"
-	@echo "  annotate       - Run lexical annotation"
-	@echo "  annotate-judge - Run lexical + LLM judge annotation"
-	@echo "  analyze        - Run full analysis pipeline"
-	@echo "  descriptive    - Descriptive statistics only"
-	@echo "  regression     - Regression models only"
-	@echo "  entropy        - Semantic entropy only"
-	@echo "  visualize      - Generate all figures"
-	@echo "  dev            - Quick dev cycle: pilot → annotate → analyze → visualize"
-	@echo "  install        - Install Python dependencies"
-	@echo "  clean          - Remove generated data (preserves tasks)"
+	@echo ""
+	@echo "  Task curation:"
+	@echo "    curate         - Full 500-prompt suite"
+	@echo "    curate-dev     - Small 50-prompt dev set"
+	@echo ""
+	@echo "  Collection:"
+	@echo "    collect        - All models (requires vLLM + API keys)"
+	@echo "    collect-api    - API models only (run locally)"
+	@echo "    collect-model  - Single model (MODEL=vllm:deepseek-r1-70b)"
+	@echo "    collect-cluster - Submit vLLM SLURM jobs (run from cluster)"
+	@echo "    pilot          - 50-prompt pilot, all models"
+	@echo "    pilot-api      - 50-prompt pilot, API models only"
+	@echo "    pilot-model    - 50-prompt pilot, single model"
+	@echo ""
+	@echo "  Cluster sync:"
+	@echo "    push-cluster   - Push code + tasks to NVWulf"
+	@echo "    pull-cluster   - Pull collected data from NVWulf"
+	@echo ""
+	@echo "  Annotation:"
+	@echo "    annotate       - Lexical features (primary)"
+	@echo "    annotate-judge - Lexical + LLM judge"
+	@echo ""
+	@echo "  Analysis:"
+	@echo "    analyze        - Full analysis pipeline"
+	@echo "    descriptive    - Descriptive stats only"
+	@echo "    regression     - Regression models only"
+	@echo "    entropy        - Semantic entropy only"
+	@echo ""
+	@echo "  Visualization:"
+	@echo "    visualize      - Generate all figures"
+	@echo ""
+	@echo "  Setup:"
+	@echo "    install        - Install local dependencies"
+	@echo "    install-cluster - Setup NVWulf conda env"
+	@echo "    dev            - Quick dev cycle"
+	@echo "    clean          - Remove generated data"

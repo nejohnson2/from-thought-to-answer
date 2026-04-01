@@ -2,10 +2,10 @@
 
 Usage:
     python -m src.collect.run_collection --tasks-dir data/tasks --output-dir data/raw \
-        --models ollama:deepseek-r1:70b ollama:qwen3:32b anthropic google openai
+        --models vllm:deepseek-r1-70b vllm:qwen3-32b anthropic google openai
 
     python -m src.collect.run_collection --tasks-dir data/tasks --output-dir data/raw \
-        --models ollama:deepseek-r1:70b --bucket factual_qa --repeated-samples 5
+        --models vllm:deepseek-r1-70b --bucket factual_qa --repeated-samples 5
 """
 
 import argparse
@@ -22,10 +22,10 @@ from .base_collector import (
     load_tasks,
     save_record,
 )
-from .ollama_collector import OllamaCollector
 from .anthropic_collector import AnthropicCollector
 from .google_collector import GoogleCollector
 from .openai_collector import OpenAICollector
+from .vllm_collector import VLLMCollector
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,8 @@ def build_collector(model_spec: str, temperature: float = 0.0) -> BaseCollector:
     """Build a collector from a model spec string.
 
     Formats:
-        ollama:<model_name>          e.g. ollama:deepseek-r1:70b
+        vllm:<model_name>            e.g. vllm:deepseek-r1-70b
+        vllm:<model_name>@<url>      e.g. vllm:deepseek-r1-70b@http://host:8000/v1
         anthropic                    uses default Claude Sonnet 4.6
         anthropic:<model_name>       e.g. anthropic:claude-sonnet-4-6-20260401
         google                       uses default Gemini 2.5 Flash
@@ -49,9 +50,19 @@ def build_collector(model_spec: str, temperature: float = 0.0) -> BaseCollector:
     parts = model_spec.split(":", 1)
     provider = parts[0]
 
-    if provider == "ollama":
-        model_name = parts[1] if len(parts) > 1 else "deepseek-r1:70b"
-        return OllamaCollector(model_name=model_name, temperature=temperature)
+    if provider == "vllm":
+        rest = parts[1] if len(parts) > 1 else "deepseek-r1-70b"
+        # Support vllm:model@url format
+        if "@" in rest:
+            model_name, base_url = rest.split("@", 1)
+        else:
+            model_name = rest
+            base_url = "http://localhost:8000/v1"
+        return VLLMCollector(
+            model_name=model_name,
+            temperature=temperature,
+            base_url=base_url,
+        )
 
     elif provider == "anthropic":
         model_name = parts[1] if len(parts) > 1 else "claude-sonnet-4-6-20260401"

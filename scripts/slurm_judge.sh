@@ -9,8 +9,8 @@
 #SBATCH --error=/lustre/nvwulf/scratch/nijjohnson/logs/cot-judge-%j.err
 
 # ============================================================
-# SLURM job for LLM judge annotation on NVWulf
-# Runs Llama 4 via Ollama to classify uncertainty in responses
+# SLURM job for LLM judge annotation via vLLM on NVWulf
+# Serves Llama 4 70B and runs the annotation pipeline
 # ============================================================
 
 set -euo pipefail
@@ -19,38 +19,56 @@ module load cuda12.8/toolkit/12.8.0
 
 SCRATCH="/lustre/nvwulf/scratch/nijjohnson"
 PROJECT_DIR="${SCRATCH}/cot-analysis"
-OLLAMA_DIR="${SCRATCH}/ollama"
+export HF_HOME="${SCRATCH}/hf_cache"
 
-export OLLAMA_MODELS="${OLLAMA_DIR}/models"
-export OLLAMA_HOST="127.0.0.1:11434"
-
-conda activate cot-analysis
-
-# Start Ollama server
-echo "[$(date)] Starting Ollama server..."
-ollama serve &
-OLLAMA_PID=$!
-sleep 10
-
-if ! curl -s http://127.0.0.1:11434/api/tags > /dev/null 2>&1; then
-    echo "[$(date)] ERROR: Ollama server failed to start"
-    exit 1
+if [ -f "${HOME}/.cache/huggingface/token" ]; then
+    export HF_TOKEN=$(cat "${HOME}/.cache/huggingface/token")
 fi
 
-# Pull judge model
-echo "[$(date)] Pulling Llama 4 judge model..."
-ollama pull llama4:70b
+conda activate cot-analysis
+cd "${PROJECT_DIR}"
 
-# Run annotation
+JUDGE_MODEL="meta-llama/Llama-4-Scout-17B-16E-Instruct"
+VLLM_PORT=8000
+VLLM_URL="http://localhost:${VLLM_PORT}/v1"
+
+# Start vLLM server for judge model
+echo "[$(date)] Starting vLLM server for judge model..."
+vllm serve "${JUDGE_MODEL}" \
+    --tensor-parallel-size 4 \
+    --port "${VLLM_PORT}" \
+    --max-model-len 8192 \
+    --gpu-memory-utilization 0.90 \
+    --disable-log-requests \
+    &
+
+VLLM_PID=$!
+
+# Wait for server
+for i in $(seq 1 120); do
+    if curl -s "${VLLM_URL}/models" > /dev/null 2>&1; then
+        echo "[$(date)] vLLM judge server ready after ${i}s."
+        break
+    fi
+    if [ $i -eq 120 ]; then
+        echo "[$(date)] ERROR: vLLM server failed to start."
+        kill ${VLLM_PID} 2>/dev/null || true
+        exit 1
+    fi
+    sleep 1
+done
+
+# Run annotation with vLLM-based judge
 echo "[$(date)] Starting LLM judge annotation..."
 python -m src.annotate.run_annotation \
-    --input-dir "${PROJECT_DIR}/data/raw" \
-    --output-dir "${PROJECT_DIR}/data/processed" \
-    --judge-model "llama4:70b" \
+    --input-dir data/raw \
+    --output-dir data/processed \
+    --judge-model "${JUDGE_MODEL}" \
+    --judge-host "${VLLM_URL}" \
     --log-level INFO
 
 # Cleanup
-kill ${OLLAMA_PID} 2>/dev/null || true
-wait ${OLLAMA_PID} 2>/dev/null || true
+kill ${VLLM_PID} 2>/dev/null || true
+wait ${VLLM_PID} 2>/dev/null || true
 
 echo "[$(date)] Judge annotation complete."

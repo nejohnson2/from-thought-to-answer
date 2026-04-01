@@ -1,0 +1,115 @@
+#!/bin/bash
+#SBATCH --job-name=cot-vllm-collect
+#SBATCH --partition=h200x4
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --gpus=4
+#SBATCH --time=08:00:00
+#SBATCH --output=/lustre/nvwulf/scratch/nijjohnson/logs/cot-vllm-%j.out
+#SBATCH --error=/lustre/nvwulf/scratch/nijjohnson/logs/cot-vllm-%j.err
+
+# ============================================================
+# SLURM job for vLLM-based data collection on NVWulf
+#
+# Usage:
+#   # Collect DeepSeek-R1 70B:
+#   sbatch scripts/slurm_vllm_collect.sh --export=MODEL=deepseek-r1-70b
+#
+#   # Collect Qwen3 32B:
+#   sbatch scripts/slurm_vllm_collect.sh --export=MODEL=qwen3-32b
+#
+#   # Pilot only:
+#   sbatch scripts/slurm_vllm_collect.sh --export=MODEL=deepseek-r1-70b,PILOT=1
+# ============================================================
+
+set -euo pipefail
+
+# --- Default model if not set via --export ---
+MODEL="${MODEL:-deepseek-r1-70b}"
+PILOT="${PILOT:-0}"
+
+# --- Model config ---
+declare -A HF_MODELS
+HF_MODELS[deepseek-r1-70b]="deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
+HF_MODELS[qwen3-32b]="Qwen/Qwen3-32B"
+
+declare -A TP_SIZE
+TP_SIZE[deepseek-r1-70b]=4
+TP_SIZE[qwen3-32b]=2
+
+HF_MODEL="${HF_MODELS[$MODEL]}"
+TENSOR_PARALLEL="${TP_SIZE[$MODEL]}"
+
+# --- Environment ---
+module load cuda12.8/toolkit/12.8.0
+
+SCRATCH="/lustre/nvwulf/scratch/nijjohnson"
+PROJECT_DIR="${SCRATCH}/cot-analysis"
+export HF_HOME="${SCRATCH}/hf_cache"
+
+# Load HF token
+if [ -f "${HOME}/.cache/huggingface/token" ]; then
+    export HF_TOKEN=$(cat "${HOME}/.cache/huggingface/token")
+fi
+
+conda activate cot-analysis
+cd "${PROJECT_DIR}"
+
+VLLM_PORT=8000
+VLLM_URL="http://localhost:${VLLM_PORT}/v1"
+
+# --- Start vLLM server ---
+echo "[$(date)] Starting vLLM server for ${HF_MODEL} (TP=${TENSOR_PARALLEL})..."
+
+vllm serve "${HF_MODEL}" \
+    --tensor-parallel-size "${TENSOR_PARALLEL}" \
+    --port "${VLLM_PORT}" \
+    --max-model-len 16384 \
+    --gpu-memory-utilization 0.90 \
+    --disable-log-requests \
+    &
+
+VLLM_PID=$!
+
+# Wait for server to be ready
+echo "[$(date)] Waiting for vLLM server to start..."
+for i in $(seq 1 120); do
+    if curl -s "${VLLM_URL}/models" > /dev/null 2>&1; then
+        echo "[$(date)] vLLM server ready after ${i}s."
+        break
+    fi
+    if [ $i -eq 120 ]; then
+        echo "[$(date)] ERROR: vLLM server failed to start after 120s."
+        kill ${VLLM_PID} 2>/dev/null || true
+        exit 1
+    fi
+    sleep 1
+done
+
+# --- Run collection ---
+COLLECTOR_SPEC="vllm:${MODEL}"
+
+if [ "${PILOT}" = "1" ]; then
+    echo "[$(date)] Running PILOT for ${MODEL}..."
+    python scripts/pilot.py \
+        --tasks-dir data/tasks \
+        --output-dir data/raw \
+        --models "${COLLECTOR_SPEC}" \
+        --log-level INFO
+else
+    echo "[$(date)] Running FULL COLLECTION for ${MODEL}..."
+    python -m src.collect.run_collection \
+        --tasks-dir data/tasks \
+        --output-dir data/raw \
+        --models "${COLLECTOR_SPEC}" \
+        --repeated-samples 5 \
+        --repeated-bucket factual_qa \
+        --log-level INFO
+fi
+
+# --- Cleanup ---
+echo "[$(date)] Stopping vLLM server..."
+kill ${VLLM_PID} 2>/dev/null || true
+wait ${VLLM_PID} 2>/dev/null || true
+
+echo "[$(date)] Collection complete for ${MODEL}."
