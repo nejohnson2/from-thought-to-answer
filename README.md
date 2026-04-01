@@ -56,7 +56,7 @@ GOOGLE_API_KEY=your_key_here
 ### NVWulf (GPU Cluster)
 
 ```bash
-module load cuda12.8/toolkit/12.8.0
+module load cuda12.8/toolkit/12.8.1
 conda activate cot-analysis
 ```
 

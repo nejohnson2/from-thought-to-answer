@@ -21,7 +21,7 @@ if [ ! -f "RESEARCH_DESIGN.md" ]; then
 fi
 
 # --- Load CUDA ---
-module load cuda12.8/toolkit/12.8.0
+module load cuda12.8/toolkit/12.8.1
 
 # --- Create conda environment ---
 echo "[$(date)] Creating conda environment 'cot-analysis'..."
