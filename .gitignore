@@ -1,0 +1,29 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+
+# Data files
+data/raw/
+data/raw_payloads/
+data/processed/
+
+# Keep task definitions in version control
+!data/tasks/
+
+# Model files
+*.bin
+*.gguf
+*.safetensors
+
+# Experiment artifacts
+*.log
+checkpoints/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
