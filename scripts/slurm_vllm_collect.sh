@@ -1,9 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=cot-vllm-collect
-#SBATCH --partition=h200x4
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus=4
 #SBATCH --time=08:00:00
 #SBATCH --output=logs/cot-vllm-%j.out
 #SBATCH --error=logs/cot-vllm-%j.err
@@ -11,15 +9,18 @@
 # ============================================================
 # SLURM job for vLLM-based data collection on NVWulf
 #
-# Usage:
-#   # Collect DeepSeek-R1 70B:
-#   sbatch scripts/slurm_vllm_collect.sh --export=MODEL=deepseek-r1-70b
+# GPU count and partition are set at submit time, not in the
+# script, so each model gets only what it needs.
 #
-#   # Collect Qwen3 32B:
-#   sbatch scripts/slurm_vllm_collect.sh --export=MODEL=qwen3-32b
+# Usage:
+#   # DeepSeek-R1 70B (needs 2 GPUs):
+#   sbatch --partition=h200x4 --gpus=2 scripts/slurm_vllm_collect.sh --export=MODEL=deepseek-r1-70b
+#
+#   # Qwen3 32B (needs 1 GPU, 2 for comfort):
+#   sbatch --partition=h200x4 --gpus=2 scripts/slurm_vllm_collect.sh --export=MODEL=qwen3-32b
 #
 #   # Pilot only:
-#   sbatch scripts/slurm_vllm_collect.sh --export=MODEL=deepseek-r1-70b,PILOT=1
+#   sbatch --partition=debug-h200x4 --gpus=2 --time=01:00:00 scripts/slurm_vllm_collect.sh --export=MODEL=deepseek-r1-70b,PILOT=1
 # ============================================================
 
 set -euo pipefail
@@ -34,8 +35,8 @@ HF_MODELS[deepseek-r1-70b]="deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
 HF_MODELS[qwen3-32b]="Qwen/Qwen3-32B"
 
 declare -A TP_SIZE
-TP_SIZE[deepseek-r1-70b]=4
-TP_SIZE[qwen3-32b]=2
+TP_SIZE[deepseek-r1-70b]=2
+TP_SIZE[qwen3-32b]=1
 
 HF_MODEL="${HF_MODELS[$MODEL]}"
 TENSOR_PARALLEL="${TP_SIZE[$MODEL]}"
@@ -60,6 +61,7 @@ VLLM_URL="http://localhost:${VLLM_PORT}/v1"
 
 # --- Start vLLM server ---
 echo "[$(date)] Starting vLLM server for ${HF_MODEL} (TP=${TENSOR_PARALLEL})..."
+echo "[$(date)] GPUs allocated: ${SLURM_GPUS_ON_NODE:-unknown}"
 
 vllm serve "${HF_MODEL}" \
     --tensor-parallel-size "${TENSOR_PARALLEL}" \
@@ -71,15 +73,19 @@ vllm serve "${HF_MODEL}" \
 
 VLLM_PID=$!
 
-# Wait for server to be ready
+# Wait for server to be ready (model loading can take a few minutes)
 echo "[$(date)] Waiting for vLLM server to start..."
-for i in $(seq 1 120); do
+for i in $(seq 1 300); do
     if curl -s "${VLLM_URL}/models" > /dev/null 2>&1; then
         echo "[$(date)] vLLM server ready after ${i}s."
         break
     fi
-    if [ $i -eq 120 ]; then
-        echo "[$(date)] ERROR: vLLM server failed to start after 120s."
+    if ! kill -0 ${VLLM_PID} 2>/dev/null; then
+        echo "[$(date)] ERROR: vLLM server process died."
+        exit 1
+    fi
+    if [ $i -eq 300 ]; then
+        echo "[$(date)] ERROR: vLLM server failed to start after 300s."
         kill ${VLLM_PID} 2>/dev/null || true
         exit 1
     fi
