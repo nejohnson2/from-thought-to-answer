@@ -25,6 +25,7 @@ if [ -f "${HOME}/.cache/huggingface/token" ]; then
     export HF_TOKEN=$(cat "${HOME}/.cache/huggingface/token")
 fi
 
+source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate cot-analysis
 cd "${PROJECT_DIR}"
 
