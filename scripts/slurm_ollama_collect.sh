@@ -23,7 +23,7 @@ set -euo pipefail
 module load cuda12.8/toolkit/12.8.1
 
 SCRATCH="/lustre/nvwulf/scratch/nijjohnson"
-PROJECT_DIR="${SCRATCH}/cot-analysis"
+PROJECT_DIR="${SCRATCH}/from-thought-to-answer"
 OLLAMA_DIR="${SCRATCH}/ollama"
 LOG_DIR="${SCRATCH}/logs"
 

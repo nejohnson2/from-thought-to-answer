@@ -45,7 +45,7 @@ TENSOR_PARALLEL="${TP_SIZE[$MODEL]}"
 module load cuda12.8/toolkit/12.8.1
 
 SCRATCH="/lustre/nvwulf/scratch/nijjohnson"
-PROJECT_DIR="${SCRATCH}/cot-analysis"
+PROJECT_DIR="${SCRATCH}/from-thought-to-answer"
 export HF_HOME="${SCRATCH}/hf_cache"
 
 # Load HF token

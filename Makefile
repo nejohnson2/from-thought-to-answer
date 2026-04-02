@@ -156,7 +156,7 @@ pilot-api:
 # ============================================================
 
 NVWULF_HOST ?= nvwulf
-NVWULF_PROJECT = /lustre/nvwulf/scratch/nijjohnson/cot-analysis
+NVWULF_PROJECT = /lustre/nvwulf/scratch/nijjohnson/from-thought-to-answer
 
 # Push task suite + code to cluster
 push-cluster:

@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SCRATCH="/lustre/nvwulf/scratch/nijjohnson"
-PROJECT_DIR="${SCRATCH}/cot-analysis"
+PROJECT_DIR="${SCRATCH}/from-thought-to-answer"
 HF_CACHE="${SCRATCH}/hf_cache"
 
 echo "[$(date)] Setting up cot-analysis on NVWulf..."
