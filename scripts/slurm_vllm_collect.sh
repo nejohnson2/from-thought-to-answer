@@ -55,6 +55,7 @@ fi
 
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate cot-analysis
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 cd "${PROJECT_DIR}"
 
 VLLM_PORT=8000

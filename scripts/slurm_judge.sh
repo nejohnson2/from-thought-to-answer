@@ -27,6 +27,7 @@ fi
 
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate cot-analysis
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 cd "${PROJECT_DIR}"
 
 JUDGE_MODEL="meta-llama/Llama-4-Scout-17B-16E-Instruct"
