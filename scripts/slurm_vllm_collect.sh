@@ -35,11 +35,16 @@ HF_MODELS[deepseek-r1-70b]="deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
 HF_MODELS[qwen3-32b]="Qwen/Qwen3-32B"
 
 declare -A TP_SIZE
-TP_SIZE[deepseek-r1-70b]=2
+TP_SIZE[deepseek-r1-70b]=1
 TP_SIZE[qwen3-32b]=1
+
+declare -A QUANT
+QUANT[deepseek-r1-70b]="fp8"
+QUANT[qwen3-32b]=""
 
 HF_MODEL="${HF_MODELS[$MODEL]}"
 TENSOR_PARALLEL="${TP_SIZE[$MODEL]}"
+QUANTIZATION="${QUANT[$MODEL]}"
 
 # --- Environment ---
 module load cuda12.8/toolkit/12.8.1
@@ -62,21 +67,27 @@ VLLM_PORT=8000
 VLLM_URL="http://localhost:${VLLM_PORT}/v1"
 
 # --- Start vLLM server ---
-echo "[$(date)] Starting vLLM server for ${HF_MODEL} (TP=${TENSOR_PARALLEL})..."
+echo "[$(date)] Starting vLLM server for ${HF_MODEL} (TP=${TENSOR_PARALLEL}, quant=${QUANTIZATION:-none})..."
 echo "[$(date)] GPUs allocated: ${SLURM_GPUS_ON_NODE:-unknown}"
 
-vllm serve "${HF_MODEL}" \
-    --tensor-parallel-size "${TENSOR_PARALLEL}" \
-    --port "${VLLM_PORT}" \
-    --max-model-len 16384 \
-    --gpu-memory-utilization 0.90 \
-    &
+VLLM_ARGS=(
+    --tensor-parallel-size "${TENSOR_PARALLEL}"
+    --port "${VLLM_PORT}"
+    --max-model-len 16384
+    --gpu-memory-utilization 0.90
+)
+
+if [ -n "${QUANTIZATION}" ]; then
+    VLLM_ARGS+=(--quantization "${QUANTIZATION}")
+fi
+
+vllm serve "${HF_MODEL}" "${VLLM_ARGS[@]}" &
 
 VLLM_PID=$!
 
 # Wait for server to be ready (model loading can take a few minutes)
 echo "[$(date)] Waiting for vLLM server to start..."
-for i in $(seq 1 300); do
+for i in $(seq 1 900); do
     if curl -s "${VLLM_URL}/models" > /dev/null 2>&1; then
         echo "[$(date)] vLLM server ready after ${i}s."
         break
@@ -85,8 +96,8 @@ for i in $(seq 1 300); do
         echo "[$(date)] ERROR: vLLM server process died."
         exit 1
     fi
-    if [ $i -eq 300 ]; then
-        echo "[$(date)] ERROR: vLLM server failed to start after 300s."
+    if [ $i -eq 900 ]; then
+        echo "[$(date)] ERROR: vLLM server failed to start after 900s."
         kill ${VLLM_PID} 2>/dev/null || true
         exit 1
     fi
