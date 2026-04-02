@@ -55,7 +55,7 @@ class VLLMCollector(BaseCollector):
         model_name: str,
         model_version: str = "",
         temperature: float = 0.0,
-        max_tokens: int = 16384,
+        max_tokens: int = 8192,
         thinking_budget: int | None = None,
         base_url: str = "http://localhost:8000/v1",
         api_key: str = "dummy",
