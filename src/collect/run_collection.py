@@ -22,11 +22,6 @@ from .base_collector import (
     load_tasks,
     save_record,
 )
-from .anthropic_collector import AnthropicCollector
-from .google_collector import GoogleCollector
-from .openai_collector import OpenAICollector
-from .vllm_collector import VLLMCollector
-
 logger = logging.getLogger(__name__)
 
 
@@ -36,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 def build_collector(model_spec: str, temperature: float = 0.0) -> BaseCollector:
     """Build a collector from a model spec string.
+
+    Imports are lazy so each provider's SDK only needs to be installed
+    when that provider is actually used. This allows running vLLM models
+    on the cluster without installing anthropic/google-genai/etc.
 
     Formats:
         vllm:<model_name>            e.g. vllm:deepseek-r1-70b
@@ -51,6 +50,8 @@ def build_collector(model_spec: str, temperature: float = 0.0) -> BaseCollector:
     provider = parts[0]
 
     if provider == "vllm":
+        from .vllm_collector import VLLMCollector
+
         rest = parts[1] if len(parts) > 1 else "deepseek-r1-70b"
         # Support vllm:model@url format
         if "@" in rest:
@@ -65,14 +66,20 @@ def build_collector(model_spec: str, temperature: float = 0.0) -> BaseCollector:
         )
 
     elif provider == "anthropic":
+        from .anthropic_collector import AnthropicCollector
+
         model_name = parts[1] if len(parts) > 1 else "claude-sonnet-4-6-20260401"
         return AnthropicCollector(model_name=model_name, temperature=1.0)
 
     elif provider == "google":
+        from .google_collector import GoogleCollector
+
         model_name = parts[1] if len(parts) > 1 else "gemini-2.5-flash"
         return GoogleCollector(model_name=model_name, temperature=temperature)
 
     elif provider == "openai":
+        from .openai_collector import OpenAICollector
+
         model_name = parts[1] if len(parts) > 1 else "o4-mini"
         return OpenAICollector(model_name=model_name, temperature=1.0)
 
