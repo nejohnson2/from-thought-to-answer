@@ -70,7 +70,6 @@ vllm serve "${HF_MODEL}" \
     --port "${VLLM_PORT}" \
     --max-model-len 16384 \
     --gpu-memory-utilization 0.90 \
-    --disable-log-requests \
     &
 
 VLLM_PID=$!
