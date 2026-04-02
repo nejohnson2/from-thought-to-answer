@@ -46,8 +46,7 @@ if [ -f "${HOME}/.cache/huggingface/token" ]; then
 fi
 
 # --- Create data directories ---
-mkdir -p data/raw data/raw_payloads data/processed
-mkdir -p "${SCRATCH}/logs"
+mkdir -p data/raw data/raw_payloads data/processed logs
 
 # --- Download models (optional, can also happen at serve time) ---
 echo ""

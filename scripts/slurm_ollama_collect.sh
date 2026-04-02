@@ -5,8 +5,8 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus=4
 #SBATCH --time=08:00:00
-#SBATCH --output=/lustre/nvwulf/scratch/nijjohnson/logs/cot-collect-%j.out
-#SBATCH --error=/lustre/nvwulf/scratch/nijjohnson/logs/cot-collect-%j.err
+#SBATCH --output=logs/cot-collect-%j.out
+#SBATCH --error=logs/cot-collect-%j.err
 
 # ============================================================
 # SLURM job for Ollama-based data collection on NVWulf

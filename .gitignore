@@ -18,6 +18,7 @@ data/processed/
 *.safetensors
 
 # Experiment artifacts
+logs/
 *.log
 checkpoints/
 

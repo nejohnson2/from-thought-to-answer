@@ -5,8 +5,8 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus=4
 #SBATCH --time=04:00:00
-#SBATCH --output=/lustre/nvwulf/scratch/nijjohnson/logs/cot-judge-%j.out
-#SBATCH --error=/lustre/nvwulf/scratch/nijjohnson/logs/cot-judge-%j.err
+#SBATCH --output=logs/cot-judge-%j.out
+#SBATCH --error=logs/cot-judge-%j.err
 
 # ============================================================
 # SLURM job for LLM judge annotation via vLLM on NVWulf
