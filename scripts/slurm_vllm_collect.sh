@@ -35,7 +35,7 @@ HF_MODELS[deepseek-r1-70b]="deepseek-ai/DeepSeek-R1-Distill-Llama-70B"
 HF_MODELS[qwen3-32b]="Qwen/Qwen3-32B"
 
 declare -A TP_SIZE
-TP_SIZE[deepseek-r1-70b]=1
+TP_SIZE[deepseek-r1-70b]=2
 TP_SIZE[qwen3-32b]=1
 
 declare -A QUANT
