@@ -71,17 +71,44 @@ class VLLMCollector(BaseCollector):
         self._client = openai.OpenAI(base_url=base_url, api_key=api_key)
 
         # Resolve the actual model name served by vLLM
-        # vLLM uses the HF model path as the model name
+        # vLLM uses the HF model path as the model name, which differs
+        # from our short name (e.g. "deepseek-r1-70b"). Query the server
+        # to get the actual served model ID.
         self._served_model = self._resolve_model_name()
 
     def _resolve_model_name(self) -> str:
-        """Get the actual model name from the vLLM server."""
+        """Get the actual model name from the vLLM server.
+
+        Only accepts the served model if it matches our expected model
+        (by checking if our model_name appears as a substring of the
+        served model ID). This prevents cross-contamination when multiple
+        vLLM servers are running on different ports.
+        """
+        # Mapping from our short names to expected HF model substrings
+        expected_patterns = {
+            "deepseek-r1-70b": "deepseek",
+            "qwen3-32b": "qwen",
+        }
+        expected = expected_patterns.get(self.model_name, self.model_name.lower())
+
         try:
             models = self._client.models.list()
             if models.data:
                 served = models.data[0].id
-                logger.info("vLLM serving model: %s", served)
-                return served
+                if expected in served.lower():
+                    logger.info("vLLM serving model: %s (matches %s)", served, self.model_name)
+                    return served
+                else:
+                    logger.error(
+                        "vLLM is serving '%s' but expected a model matching '%s'. "
+                        "Is the correct server running on %s?",
+                        served, self.model_name, self.base_url,
+                    )
+                    raise RuntimeError(
+                        f"Model mismatch: server has '{served}', expected '{self.model_name}'"
+                    )
+        except RuntimeError:
+            raise
         except Exception as e:
             logger.warning("Could not query vLLM models endpoint: %s", e)
         return self.model_name
