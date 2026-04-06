@@ -125,24 +125,49 @@ class VLLMCollector(BaseCollector):
         return response.model_dump() if hasattr(response, "model_dump") else dict(response)
 
     def _extract_reasoning_artifact(self, raw_response: dict[str, Any]) -> str:
+        # First try: vLLM reasoning_content (when --enable-reasoning is used)
+        reasoning = self._get_reasoning_content(raw_response)
+        if reasoning:
+            return reasoning
+        # Fallback: parse <think> tags from full text
         full_text = self._get_full_text(raw_response)
         thinking, _ = _split_thinking(full_text)
         return thinking
 
     def _extract_final_answer(self, raw_response: dict[str, Any]) -> str:
+        # If reasoning_content is present, content is already clean
+        reasoning = self._get_reasoning_content(raw_response)
+        if reasoning:
+            return self._get_full_text(raw_response)
+        # Fallback: strip <think> tags
         full_text = self._get_full_text(raw_response)
         _, content = _split_thinking(full_text)
         return content
 
     def _extract_content_blocks(self, raw_response: dict[str, Any]) -> list[dict[str, Any]]:
-        full_text = self._get_full_text(raw_response)
-        thinking, content = _split_thinking(full_text)
+        reasoning = self._get_reasoning_content(raw_response)
+        content = self._get_full_text(raw_response)
         blocks = []
-        if thinking:
-            blocks.append({"type": "thinking", "text": thinking})
-        if content:
-            blocks.append({"type": "content", "text": content})
+        if reasoning:
+            blocks.append({"type": "thinking", "text": reasoning})
+            if content:
+                blocks.append({"type": "content", "text": content})
+        else:
+            # Fallback: parse <think> tags
+            thinking, final = _split_thinking(content)
+            if thinking:
+                blocks.append({"type": "thinking", "text": thinking})
+            if final:
+                blocks.append({"type": "content", "text": final})
         return blocks
+
+    def _get_reasoning_content(self, raw_response: dict[str, Any]) -> str:
+        """Extract reasoning_content from vLLM response (when --enable-reasoning is used)."""
+        choices = raw_response.get("choices", [])
+        if not choices:
+            return ""
+        message = choices[0].get("message", {})
+        return message.get("reasoning_content", "") or ""
 
     def _extract_token_usage(self, raw_response: dict[str, Any]) -> dict[str, int | None]:
         usage = raw_response.get("usage", {})

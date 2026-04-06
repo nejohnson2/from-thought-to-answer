@@ -98,6 +98,8 @@ def run_collection(
     repeated_samples: int = 0,
     repeated_bucket: TaskBucket | None = None,
     repeated_temperature: float = 0.7,
+    skip_primary: bool = False,
+    repeated_only: bool = False,
 ) -> dict[str, int]:
     """Run collection for a single model across all tasks.
 
@@ -108,27 +110,36 @@ def run_collection(
         repeated_samples: Number of additional samples for repeated sampling (0 = none).
         repeated_bucket: Only do repeated sampling for this task bucket.
         repeated_temperature: Temperature for repeated sampling.
+        skip_primary: If True, skip primary (sample_index=0) collection.
+        repeated_only: If True, only run repeated sampling (implies skip_primary).
 
     Returns:
         Summary stats dict.
     """
+    if repeated_only:
+        skip_primary = True
+
     stats = {"total": 0, "success": 0, "parse_fail": 0, "error": 0, "repeated": 0}
 
     model_label = f"{collector.provider.value}:{collector.model_name}"
-    logger.info("Starting collection for %s (%d tasks)", model_label, len(tasks))
+    logger.info(
+        "Starting collection for %s (%d tasks, skip_primary=%s, repeated_only=%s)",
+        model_label, len(tasks), skip_primary, repeated_only,
+    )
 
     for task in tqdm(tasks, desc=model_label):
         # Primary sample (temperature=0 or provider default)
-        record = collector.collect(task, sample_index=0)
-        save_record(record, output_dir)
-        stats["total"] += 1
+        if not skip_primary:
+            record = collector.collect(task, sample_index=0)
+            save_record(record, output_dir)
+            stats["total"] += 1
 
-        if record.failure_metadata.error_message:
-            stats["error"] += 1
-        elif record.failure_metadata.parse_failure:
-            stats["parse_fail"] += 1
-        else:
-            stats["success"] += 1
+            if record.failure_metadata.error_message:
+                stats["error"] += 1
+            elif record.failure_metadata.parse_failure:
+                stats["parse_fail"] += 1
+            else:
+                stats["success"] += 1
 
         # Repeated sampling for semantic uncertainty
         if repeated_samples > 0 and (
@@ -170,6 +181,8 @@ def main() -> None:
     parser.add_argument("--repeated-bucket", type=str, default="factual_qa", help="Only repeat-sample this bucket")
     parser.add_argument("--repeated-temperature", type=float, default=0.7, help="Temperature for repeated sampling")
     parser.add_argument("--temperature", type=float, default=0.0, help="Temperature for primary sampling")
+    parser.add_argument("--skip-primary", action="store_true", help="Skip primary samples (sample_index=0)")
+    parser.add_argument("--repeated-only", action="store_true", help="Only run repeated sampling (skips primary)")
     parser.add_argument("--log-level", type=str, default="INFO", help="Logging level")
     args = parser.parse_args()
 
@@ -205,6 +218,8 @@ def main() -> None:
             repeated_samples=args.repeated_samples,
             repeated_bucket=repeated_bucket,
             repeated_temperature=args.repeated_temperature,
+            skip_primary=args.skip_primary,
+            repeated_only=args.repeated_only,
         )
         all_stats[model_spec] = stats
 

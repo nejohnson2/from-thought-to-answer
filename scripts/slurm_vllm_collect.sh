@@ -28,6 +28,7 @@ set -euo pipefail
 # --- Default model if not set via --export ---
 MODEL="${MODEL:-deepseek-r1-70b}"
 PILOT="${PILOT:-0}"
+REPEATED_ONLY="${REPEATED_ONLY:-0}"
 
 # --- Model config ---
 declare -A HF_MODELS
@@ -42,9 +43,14 @@ declare -A QUANT
 QUANT[deepseek-r1-70b]="fp8"
 QUANT[qwen3-32b]=""
 
+declare -A REASONING_PARSER
+REASONING_PARSER[deepseek-r1-70b]="deepseek_r1"
+REASONING_PARSER[qwen3-32b]=""
+
 HF_MODEL="${HF_MODELS[$MODEL]}"
 TENSOR_PARALLEL="${TP_SIZE[$MODEL]}"
 QUANTIZATION="${QUANT[$MODEL]}"
+PARSER="${REASONING_PARSER[$MODEL]}"
 
 # --- Environment ---
 module load cuda12.8/toolkit/12.8.1
@@ -81,6 +87,10 @@ if [ -n "${QUANTIZATION}" ]; then
     VLLM_ARGS+=(--quantization "${QUANTIZATION}")
 fi
 
+if [ -n "${PARSER}" ]; then
+    VLLM_ARGS+=(--enable-reasoning --reasoning-parser "${PARSER}")
+fi
+
 vllm serve "${HF_MODEL}" "${VLLM_ARGS[@]}" &
 
 VLLM_PID=$!
@@ -113,6 +123,16 @@ if [ "${PILOT}" = "1" ]; then
         --tasks-dir data/tasks \
         --output-dir data/raw \
         --models "${COLLECTOR_SPEC}" \
+        --log-level INFO
+elif [ "${REPEATED_ONLY}" = "1" ]; then
+    echo "[$(date)] Running REPEATED SAMPLES ONLY for ${MODEL}..."
+    python -m src.collect.run_collection \
+        --tasks-dir data/tasks \
+        --output-dir data/raw \
+        --models "${COLLECTOR_SPEC}" \
+        --repeated-samples 5 \
+        --repeated-bucket factual_qa \
+        --repeated-only \
         --log-level INFO
 else
     echo "[$(date)] Running FULL COLLECTION for ${MODEL}..."
