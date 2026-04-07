@@ -97,7 +97,7 @@ VLLM_PID=$!
 
 # Wait for server to be ready (model loading can take a few minutes)
 echo "[$(date)] Waiting for vLLM server to start..."
-for i in $(seq 1 900); do
+for i in $(seq 1 1800); do
     if curl -s "${VLLM_URL}/models" > /dev/null 2>&1; then
         echo "[$(date)] vLLM server ready after ${i}s."
         break
@@ -106,8 +106,8 @@ for i in $(seq 1 900); do
         echo "[$(date)] ERROR: vLLM server process died."
         exit 1
     fi
-    if [ $i -eq 900 ]; then
-        echo "[$(date)] ERROR: vLLM server failed to start after 900s."
+    if [ $i -eq 1800 ]; then
+        echo "[$(date)] ERROR: vLLM server failed to start after 1800s."
         kill ${VLLM_PID} 2>/dev/null || true
         exit 1
     fi
