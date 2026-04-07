@@ -87,9 +87,8 @@ if [ -n "${QUANTIZATION}" ]; then
     VLLM_ARGS+=(--quantization "${QUANTIZATION}")
 fi
 
-if [ -n "${PARSER}" ]; then
-    VLLM_ARGS+=(--enable-reasoning --reasoning-parser "${PARSER}")
-fi
+# Note: --enable-reasoning requires vLLM >= 0.19. On older versions,
+# <think> tags are parsed client-side by the vllm_collector.
 
 vllm serve "${HF_MODEL}" "${VLLM_ARGS[@]}" &
 
