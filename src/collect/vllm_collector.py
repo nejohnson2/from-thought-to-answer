@@ -23,19 +23,32 @@ logger = logging.getLogger(__name__)
 
 
 def _split_thinking(text: str) -> tuple[str, str]:
-    """Split <think>...</think> blocks from the final content.
+    """Split thinking from final content.
+
+    Handles three cases:
+    1. <think>...</think> — standard paired tags
+    2. ...text...</think>...answer — no opening tag (vLLM strips it from chat template)
+    3. No tags at all — returns empty thinking
 
     Returns (thinking_text, content_text).
     """
-    # Match <think>...</think> blocks (may span multiple lines)
+    # Case 1: Paired <think>...</think> tags
     think_pattern = re.compile(r"<think>(.*?)</think>", re.DOTALL)
-    thinking_parts = think_pattern.findall(text)
-    thinking = "\n".join(thinking_parts).strip()
+    if "<think>" in text and "</think>" in text:
+        thinking_parts = think_pattern.findall(text)
+        thinking = "\n".join(thinking_parts).strip()
+        content = think_pattern.sub("", text).strip()
+        return thinking, content
 
-    # Everything outside <think> blocks is the final content
-    content = think_pattern.sub("", text).strip()
+    # Case 2: No opening <think> but has </think> (vLLM strips the opening tag)
+    if "</think>" in text:
+        parts = text.split("</think>", 1)
+        thinking = parts[0].strip()
+        content = parts[1].strip() if len(parts) > 1 else ""
+        return thinking, content
 
-    return thinking, content
+    # Case 3: No tags at all
+    return "", text
 
 
 class VLLMCollector(BaseCollector):
